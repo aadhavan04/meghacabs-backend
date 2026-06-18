@@ -10,7 +10,11 @@ dns.setDefaultResultOrder('ipv4first')
 
 const app = express()
 app.use(cors({
-  origin: 'https://meghacabs-frontend.onrender.com',
+  origin: [
+    'https://meghacabs-frontend.onrender.com',
+    'https://www.meghacabs.co.in',
+    'https://meghacabs.co.in'
+  ],
   credentials: true
 }))
 app.use(express.json())
