@@ -12,7 +12,7 @@ const BookingSchema = new mongoose.Schema({
   time:     String,
   vehicle:  String,
   notes:    String,
-  status:   { type: String, default: 'Pending' },
+  
 }, { timestamps: true })
 
 module.exports = mongoose.model('Booking', BookingSchema)
