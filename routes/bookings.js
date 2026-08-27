@@ -16,7 +16,11 @@ const sendFormSubmitEmail = async (booking, acceptLink) => {
       _subject: confirmed ? 'Booking Confirmed - Megha Cabs' : `New Booking Request - ${booking.name}`,
       _template: 'table',
       _captcha: 'false',
+      _replyto: booking.email,
       _cc: booking.email,
+      _autoresponse: confirmed
+        ? `Hi ${booking.name}, your Megha Cabs booking is confirmed.\n\nFrom: ${booking.from}\nTo: ${booking.to}\nDate: ${booking.date}\nTime: ${booking.time}`
+        : `Hi ${booking.name}, we received your Megha Cabs booking request. Our team will review it and send a confirmation soon.\n\nFrom: ${booking.from}\nTo: ${booking.to}\nDate: ${booking.date}\nTime: ${booking.time}`,
       message: confirmed
         ? `Hi ${booking.name}, your Megha Cabs booking is confirmed.\n\nFrom: ${booking.from}\nTo: ${booking.to}\nDate: ${booking.date}\nTime: ${booking.time}`
         : `Hi ${booking.name}, we received your Megha Cabs booking request. Our team will review it and send a confirmation soon.\n\nFrom: ${booking.from}\nTo: ${booking.to}\nDate: ${booking.date}\nTime: ${booking.time}`,
@@ -35,7 +39,8 @@ const sendFormSubmitEmail = async (booking, acceptLink) => {
   })
 
   if (!response.ok) {
-    throw new Error(`FormSubmit returned ${response.status}`)
+    const errorText = await response.text()
+    throw new Error(`FormSubmit returned ${response.status}: ${errorText}`)
   }
 }
 
