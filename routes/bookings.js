@@ -24,7 +24,7 @@ router.post('/', auth, async (req, res) => {
     // Mail to YOU (owner) with Accept link
     const acceptLink = `${process.env.BACKEND_URL}/api/bookings/${booking._id}/accept`
 
-    transporter.sendMail({
+    const ownerMail = transporter.sendMail({
         from: process.env.EMAIL_USER,
         to: 'meghacabs7953@gmail.com',
         subject: `🚖 New Booking Request — ${booking.name}`,
@@ -50,9 +50,29 @@ router.post('/', auth, async (req, res) => {
           <p style="color:#94A3B8;margin-top:16px;font-size:12px;">Click accept to send confirmation mail to customer.</p>
         </div>
         `
-      }).catch(mailError => {
-        console.error('Booking saved, but owner email failed:', mailError.message)
       })
+
+    const customerMail = transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: booking.email,
+      subject: 'Booking Request Received - Megha Cabs',
+      html: `
+        <div style="font-family:sans-serif;max-width:600px;margin:auto;background:#0f172a;color:white;padding:32px;border-radius:16px;">
+          <h2 style="color:#F5C518;">Booking Request Received</h2>
+          <p>Hi ${booking.name}, we received your booking request.</p>
+          <p>Our team will review it and send a confirmation once it is accepted.</p>
+          <p><strong>${booking.from}</strong> to <strong>${booking.to}</strong></p>
+          <p>${booking.date} at ${booking.time}</p>
+          <p style="color:#94A3B8;">Megha Cabs - Your Comfort Is Our First Priority</p>
+        </div>
+      `
+    })
+
+    Promise.allSettled([ownerMail, customerMail]).then(results => {
+      results.filter(result => result.status === 'rejected').forEach(result => {
+        console.error('Booking email failed:', result.reason.message)
+      })
+    })
 
     res.json(booking)
   } catch (err) {
