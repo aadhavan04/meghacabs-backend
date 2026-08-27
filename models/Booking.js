@@ -12,6 +12,7 @@ const BookingSchema = new mongoose.Schema({
   time:     String,
   vehicle:  String,
   notes:    String,
+  status:   { type: String, enum: ['Pending', 'Confirmed'], default: 'Pending' },
   }, { timestamps: true })
 
 module.exports = mongoose.model('Booking', BookingSchema)

@@ -24,11 +24,12 @@ router.post('/', auth, async (req, res) => {
     // Mail to YOU (owner) with Accept link
     const acceptLink = `${process.env.BACKEND_URL}/api/bookings/${booking._id}/accept`
 
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to: 'meghacabs7953@gmail.com',
-      subject: `🚖 New Booking Request — ${booking.name}`,
-      html: `
+    try {
+      await transporter.sendMail({
+        from: process.env.EMAIL_USER,
+        to: 'meghacabs7953@gmail.com',
+        subject: `🚖 New Booking Request — ${booking.name}`,
+        html: `
         <div style="font-family:sans-serif;max-width:600px;margin:auto;background:#0f172a;color:white;padding:32px;border-radius:16px;">
           <h2 style="color:#F5C518;">🚖 New Booking — Megha Cabs</h2>
           <table style="width:100%;border-collapse:collapse;margin:20px 0;">
@@ -49,8 +50,11 @@ router.post('/', auth, async (req, res) => {
           </a>
           <p style="color:#94A3B8;margin-top:16px;font-size:12px;">Click accept to send confirmation mail to customer.</p>
         </div>
-      `
-    })
+        `
+      })
+    } catch (mailError) {
+      console.error('Booking saved, but owner email failed:', mailError.message)
+    }
 
     res.json(booking)
   } catch (err) {
