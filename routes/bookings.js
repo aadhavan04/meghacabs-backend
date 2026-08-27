@@ -2,46 +2,46 @@ const router = require('express').Router()
 const auth = require('../middleware/auth')
 const Booking = require('../models/Booking')
 
-const formSubmitEmail = process.env.FORM_SUBMIT_EMAIL || 'meghacabs7953@gmail.com'
+const ownerEmail = process.env.OWNER_EMAIL || 'meghacabs7953@gmail.com'
+const fromEmail = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev'
 
-const sendFormSubmitEmail = async (booking, acceptLink) => {
-  const confirmed = !acceptLink
-  const response = await fetch(`https://formsubmit.co/ajax/${formSubmitEmail}`, {
+const sendResendEmail = async (to, subject, html, replyTo) => {
+  const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Accept: 'application/json',
+      Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
     },
     body: JSON.stringify({
-      _subject: confirmed ? 'Booking Confirmed - Megha Cabs' : `New Booking Request - ${booking.name}`,
-      _template: 'table',
-      _captcha: 'false',
-      _replyto: booking.email,
-      _cc: booking.email,
-      _autoresponse: confirmed
-        ? `Hi ${booking.name}, your Megha Cabs booking is confirmed.\n\nFrom: ${booking.from}\nTo: ${booking.to}\nDate: ${booking.date}\nTime: ${booking.time}`
-        : `Hi ${booking.name}, we received your Megha Cabs booking request. Our team will review it and send a confirmation soon.\n\nFrom: ${booking.from}\nTo: ${booking.to}\nDate: ${booking.date}\nTime: ${booking.time}`,
-      message: confirmed
-        ? `Hi ${booking.name}, your Megha Cabs booking is confirmed.\n\nFrom: ${booking.from}\nTo: ${booking.to}\nDate: ${booking.date}\nTime: ${booking.time}`
-        : `Hi ${booking.name}, we received your Megha Cabs booking request. Our team will review it and send a confirmation soon.\n\nFrom: ${booking.from}\nTo: ${booking.to}\nDate: ${booking.date}\nTime: ${booking.time}`,
-      email: booking.email,
-      name: booking.name,
-      phone: booking.phone,
-      service: booking.service,
-      from: booking.from,
-      to: booking.to,
-      date: booking.date,
-      time: booking.time,
-      vehicle: booking.vehicle || 'Any',
-      notes: booking.notes || '-',
-      accept_booking: acceptLink,
+      from: fromEmail,
+      to,
+      subject,
+      html,
+      ...(replyTo ? { reply_to: replyTo } : {}),
     }),
   })
 
   if (!response.ok) {
     const errorText = await response.text()
-    throw new Error(`FormSubmit returned ${response.status}: ${errorText}`)
+    throw new Error(`Resend returned ${response.status}: ${errorText}`)
   }
+}
+
+const sendBookingEmails = async (booking, acceptLink) => {
+  const confirmed = !acceptLink
+  const subject = confirmed ? 'Booking Confirmed - Megha Cabs' : `New Booking Request - ${booking.name}`
+  const heading = confirmed ? 'Your Booking is Confirmed!' : 'New Booking Request'
+  const message = confirmed
+    ? `Hi ${booking.name}, your Megha Cabs booking is confirmed.`
+    : `Hi ${booking.name}, we received your Megha Cabs booking request.`
+  const details = `<p><strong>From:</strong> ${booking.from}</p><p><strong>To:</strong> ${booking.to}</p><p><strong>Date:</strong> ${booking.date}</p><p><strong>Time:</strong> ${booking.time}</p><p><strong>Vehicle:</strong> ${booking.vehicle || 'Any'}</p><p><strong>Notes:</strong> ${booking.notes || '-'}</p>`
+  const customerHtml = `<h2>${heading}</h2><p>${message}</p>${details}`
+  const ownerHtml = `<h2>New Booking - Megha Cabs</h2><p>Customer: ${booking.name}</p><p>Email: ${booking.email}</p><p>Phone: ${booking.phone}</p><p>Service: ${booking.service}</p>${details}<p>Accept booking: <a href="${acceptLink}">${acceptLink}</a></p>`
+
+  await Promise.all([
+    sendResendEmail(ownerEmail, subject, ownerHtml, booking.email),
+    sendResendEmail(booking.email, subject, customerHtml),
+  ])
 }
 
 // Save booking
@@ -56,8 +56,8 @@ router.post('/', auth, async (req, res) => {
     // Mail to YOU (owner) with Accept link
     const acceptLink = `${process.env.BACKEND_URL}/api/bookings/${booking._id}/accept`
 
-    sendFormSubmitEmail(booking, acceptLink).catch(mailError => {
-      console.error('Booking saved, but FormSubmit email failed:', mailError.message)
+    sendBookingEmails(booking, acceptLink).catch(mailError => {
+      console.error('Booking saved, but Resend email failed:', mailError.message)
     })
 
     res.json(booking)
@@ -79,7 +79,7 @@ router.get('/:id/accept', async (req, res) => {
     if (!booking) return res.status(404).send('Booking not found')
 
     // Notify the customer through FormSubmit after confirmation.
-    await sendFormSubmitEmail(booking, '')
+    await sendBookingEmails(booking, '')
 
     // Success page
     res.send(`
