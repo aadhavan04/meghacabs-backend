@@ -1,16 +1,42 @@
 const router = require('express').Router()
 const auth = require('../middleware/auth')
 const Booking = require('../models/Booking')
-const nodemailer = require('nodemailer')
 
-// Email transporter
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
+const formSubmitEmail = process.env.FORM_SUBMIT_EMAIL || 'meghacabs7953@gmail.com'
+
+const sendFormSubmitEmail = async (booking, acceptLink) => {
+  const confirmed = !acceptLink
+  const response = await fetch(`https://formsubmit.co/ajax/${formSubmitEmail}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify({
+      _subject: confirmed ? 'Booking Confirmed - Megha Cabs' : `New Booking Request - ${booking.name}`,
+      _template: 'table',
+      _captcha: 'false',
+      _autoresponse: confirmed
+        ? `Hi ${booking.name}, your Megha Cabs booking is confirmed.\n\nFrom: ${booking.from}\nTo: ${booking.to}\nDate: ${booking.date}\nTime: ${booking.time}`
+        : `Hi ${booking.name}, we received your Megha Cabs booking request. Our team will review it and send a confirmation soon.\n\nFrom: ${booking.from}\nTo: ${booking.to}\nDate: ${booking.date}\nTime: ${booking.time}`,
+      email: booking.email,
+      name: booking.name,
+      phone: booking.phone,
+      service: booking.service,
+      from: booking.from,
+      to: booking.to,
+      date: booking.date,
+      time: booking.time,
+      vehicle: booking.vehicle || 'Any',
+      notes: booking.notes || '-',
+      accept_booking: acceptLink,
+    }),
+  })
+
+  if (!response.ok) {
+    throw new Error(`FormSubmit returned ${response.status}`)
   }
-})
+}
 
 // Save booking
 router.post('/', auth, async (req, res) => {
@@ -24,54 +50,8 @@ router.post('/', auth, async (req, res) => {
     // Mail to YOU (owner) with Accept link
     const acceptLink = `${process.env.BACKEND_URL}/api/bookings/${booking._id}/accept`
 
-    const ownerMail = transporter.sendMail({
-        from: process.env.EMAIL_USER,
-        to: 'meghacabs7953@gmail.com',
-        subject: `🚖 New Booking Request — ${booking.name}`,
-        html: `
-        <div style="font-family:sans-serif;max-width:600px;margin:auto;background:#0f172a;color:white;padding:32px;border-radius:16px;">
-          <h2 style="color:#F5C518;">🚖 New Booking — Megha Cabs</h2>
-          <table style="width:100%;border-collapse:collapse;margin:20px 0;">
-            <tr><td style="padding:8px;color:#94A3B8;">Name</td><td style="padding:8px;">${booking.name}</td></tr>
-            <tr><td style="padding:8px;color:#94A3B8;">Phone</td><td style="padding:8px;">${booking.phone}</td></tr>
-            <tr><td style="padding:8px;color:#94A3B8;">Email</td><td style="padding:8px;">${booking.email}</td></tr>
-            <tr><td style="padding:8px;color:#94A3B8;">Service</td><td style="padding:8px;">${booking.service}</td></tr>
-            <tr><td style="padding:8px;color:#94A3B8;">From</td><td style="padding:8px;">${booking.from}</td></tr>
-            <tr><td style="padding:8px;color:#94A3B8;">To</td><td style="padding:8px;">${booking.to}</td></tr>
-            <tr><td style="padding:8px;color:#94A3B8;">Date</td><td style="padding:8px;">${booking.date}</td></tr>
-            <tr><td style="padding:8px;color:#94A3B8;">Time</td><td style="padding:8px;">${booking.time}</td></tr>
-            <tr><td style="padding:8px;color:#94A3B8;">Vehicle</td><td style="padding:8px;">${booking.vehicle || 'Any'}</td></tr>
-            <tr><td style="padding:8px;color:#94A3B8;">Notes</td><td style="padding:8px;">${booking.notes || '-'}</td></tr>
-          </table>
-          <a href="${acceptLink}" 
-             style="display:inline-block;background:#F5C518;color:#000;padding:16px 32px;border-radius:8px;font-weight:bold;font-size:18px;text-decoration:none;margin-top:16px;">
-            ✅ ACCEPT BOOKING
-          </a>
-          <p style="color:#94A3B8;margin-top:16px;font-size:12px;">Click accept to send confirmation mail to customer.</p>
-        </div>
-        `
-      })
-
-    const customerMail = transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to: booking.email,
-      subject: 'Booking Request Received - Megha Cabs',
-      html: `
-        <div style="font-family:sans-serif;max-width:600px;margin:auto;background:#0f172a;color:white;padding:32px;border-radius:16px;">
-          <h2 style="color:#F5C518;">Booking Request Received</h2>
-          <p>Hi ${booking.name}, we received your booking request.</p>
-          <p>Our team will review it and send a confirmation once it is accepted.</p>
-          <p><strong>${booking.from}</strong> to <strong>${booking.to}</strong></p>
-          <p>${booking.date} at ${booking.time}</p>
-          <p style="color:#94A3B8;">Megha Cabs - Your Comfort Is Our First Priority</p>
-        </div>
-      `
-    })
-
-    Promise.allSettled([ownerMail, customerMail]).then(results => {
-      results.filter(result => result.status === 'rejected').forEach(result => {
-        console.error('Booking email failed:', result.reason.message)
-      })
+    sendFormSubmitEmail(booking, acceptLink).catch(mailError => {
+      console.error('Booking saved, but FormSubmit email failed:', mailError.message)
     })
 
     res.json(booking)
@@ -92,32 +72,8 @@ router.get('/:id/accept', async (req, res) => {
 
     if (!booking) return res.status(404).send('Booking not found')
 
-    // Mail to CUSTOMER
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to: booking.email,
-      subject: `✅ Booking Confirmed — Megha Cabs`,
-      html: `
-        <div style="font-family:sans-serif;max-width:600px;margin:auto;background:#0f172a;color:white;padding:32px;border-radius:16px;">
-          <h2 style="color:#F5C518;">✅ Your Booking is Confirmed!</h2>
-          <p>Hi ${booking.name}, your ride has been confirmed by Megha Cabs.</p>
-          <table style="width:100%;border-collapse:collapse;margin:20px 0;">
-            <tr><td style="padding:8px;color:#94A3B8;">Service</td><td style="padding:8px;">${booking.service}</td></tr>
-            <tr><td style="padding:8px;color:#94A3B8;">From</td><td style="padding:8px;">${booking.from}</td></tr>
-            <tr><td style="padding:8px;color:#94A3B8;">To</td><td style="padding:8px;">${booking.to}</td></tr>
-            <tr><td style="padding:8px;color:#94A3B8;">Date</td><td style="padding:8px;">${booking.date}</td></tr>
-            <tr><td style="padding:8px;color:#94A3B8;">Time</td><td style="padding:8px;">${booking.time}</td></tr>
-            <tr><td style="padding:8px;color:#94A3B8;">Vehicle</td><td style="padding:8px;">${booking.vehicle || 'Any available'}</td></tr>
-          </table>
-          <p style="color:#94A3B8;">Our driver will contact you before pickup. For any queries:</p>
-          <p>📞 +91 95859 23990</p>
-          <p>💬 WhatsApp: +91 9585923990</p>
-          <div style="margin-top:24px;padding-top:16px;border-top:1px solid #1e293b;color:#94A3B8;font-size:12px;">
-            🚖 Megha Cabs — Your Comfort Is Our First Priority
-          </div>
-        </div>
-      `
-    })
+    // Notify the customer through FormSubmit after confirmation.
+    await sendFormSubmitEmail(booking, '')
 
     // Success page
     res.send(`
